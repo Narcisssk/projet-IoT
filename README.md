@@ -1,5 +1,9 @@
 # TP3 – WiFi Sniffing & Geolocation (LoRaWAN)
 
+## System Architecture
+
+![System architecture of the WiFi sniffing and geolocation pipeline](docs/iot-overview.png)
+
 ## Project Layout
 
 | Folder      | Contents |
