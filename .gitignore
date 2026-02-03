@@ -6,3 +6,6 @@ notebooks/tp3 copy.ipynb
 __pycache__/
 *.pyc
 *.pyo
+
+# other
+ap_db_fake.csv
