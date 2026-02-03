@@ -1,0 +1,8 @@
+# Notebook backup
+tp3 copy.ipynb
+notebooks/tp3 copy.ipynb
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

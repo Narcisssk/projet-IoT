@@ -268,8 +268,8 @@ class Reassembler:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--jsonl", required=True, help="sim_uplinks.jsonl")
-    ap.add_argument("--apdb", required=True, help="ap db csv (bssid,lat,lon,source)")
+    ap.add_argument("--jsonl", required=True, help="Path to uplinks JSONL (e.g. data/sim_uplinks.jsonl)")
+    ap.add_argument("--apdb", required=True, help="Path to AP DB CSV (e.g. data/ap_db_fake.csv)")
     ap.add_argument("--broker", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=1883)
     ap.add_argument("--username", default=None)

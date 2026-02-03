@@ -1,7 +1,7 @@
 /*
- *  ESP32  en mode station passive (scan)
- *  115200 output：SSID , BSSID , RSSI , Channel
- *  chaque scan ≈ 1.2 s
+ *  ESP32 in station mode, passive scan
+ *  115200 baud output: SSID, BSSID, RSSI, Channel
+ *  each scan ~1.2 s
  */
 
 #include <WiFi.h>
@@ -16,19 +16,19 @@ void setup() {
 }
 
 void loop() {
-  // scan passive
-  int n = WiFi.scanNetworks(false, true);   // 两个 true → 隐藏SSID也扫
+  // passive scan
+  int n = WiFi.scanNetworks(false, true);   // (false, true) = also scan hidden SSIDs
   if (n == 0) {
     Serial.println("❌ Aucun AP detecte");
   } else {
     Serial.printf("✅ %d  AP detecte:\n", n);
     for (int i = 0; i < n; ++i) {
       String ssid     = WiFi.SSID(i);
-      String bssid    = WiFi.BSSIDstr(i);   // forme 84:16:F9:AA:3C:21
+      String bssid    = WiFi.BSSIDstr(i);   // format e.g. 84:16:F9:AA:3C:21
       int32_t rssi    = WiFi.RSSI(i);
       uint8_t channel = WiFi.channel(i);
 
-      // forme de output(json)
+      // output format (JSON)
       Serial.printf("{\"ssid\":\"%s\", \"mac\":\"%s\", \"rssi\":%d, \"ch\":%d}\n",
                     ssid.c_str(),
                     bssid.c_str(),
@@ -38,6 +38,6 @@ void loop() {
     }
   }
 
-  WiFi.scanDelete();            // 释放内存
-  delay(5000);                  // 每 5 s 重新扫一次
+  WiFi.scanDelete();            // free scan buffer
+  delay(5000);                  // rescan every 5 s
 }

@@ -19,10 +19,10 @@ const char *dev_eui = "70B3D57ED007398E";
 const char *app_key = "C4663E9406A879F44EE74D93D977A14D";
 
 /* ---------- Config ---------- */
-const int MAX_AP = 20;                     // 每次扫描最多保留多少AP（越大越可能需要分片）
-const int APS_PER_PACKET = 4;              // 每条LoRa消息装多少AP（控制payload大小）
+const int MAX_AP = 20;                     // max APs per scan (more may require fragmentation)
+const int APS_PER_PACKET = 4;              // APs per LoRa message (controls payload size)
 const unsigned long TX_INTERVAL = 30000;   // 30 s
-const unsigned long FRAG_DELAY_MS = 5000;  // 分片之间延时（EU868 duty cycle 友好）
+const unsigned long FRAG_DELAY_MS = 5000;  // delay between fragments (EU868 duty cycle friendly)
 unsigned long last_tx = 0;
 
 
@@ -89,7 +89,7 @@ void loop() {
   }
 
   if (millis() - last_tx > TX_INTERVAL) {
-    send_scan_fragmented();  // ✅ 一次扫描，多包发送
+    send_scan_fragmented();  // one scan, send as multiple packets
     last_tx = millis();
   }
 }
@@ -137,7 +137,7 @@ void send_scan_fragmented() {
     for (int k = start; k < end; k++) {
       if (k > start) json += ",";
 
-      String ssid = json_escape(WiFi.SSID(k)); // 可能为空字符串
+      String ssid = json_escape(WiFi.SSID(k)); // may be empty string
 
       json += "[\"";
       json += WiFi.BSSIDstr(k);
