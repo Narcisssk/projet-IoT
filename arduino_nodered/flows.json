@@ -1,0 +1,330 @@
+[
+    {
+        "id": "inject_load_apdb2",
+        "type": "inject",
+        "z": "tab_geo2",
+        "name": "Load AP DB on start",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.5,
+        "topic": "load_apdb",
+        "payload": "iso",
+        "payloadType": "date",
+        "x": 160,
+        "y": 80,
+        "wires": [
+            [
+                "filein_apdb2"
+            ]
+        ]
+    },
+    {
+        "id": "filein_apdb2",
+        "type": "file in",
+        "z": "tab_geo2",
+        "name": "Read ap_db.csv",
+        "filename": "D:/learn/fr/iot/tp3/data/ap_db_fake.csv",
+        "filenameType": "str",
+        "format": "utf8",
+        "chunk": false,
+        "sendError": true,
+        "encoding": "none",
+        "allProps": false,
+        "x": 360,
+        "y": 80,
+        "wires": [
+            [
+                "fn_parse_apdb2"
+            ]
+        ]
+    },
+    {
+        "id": "fn_parse_apdb2",
+        "type": "function",
+        "z": "tab_geo2",
+        "name": "Parse AP DB (bssid,lat,lon,source) -> map topic=apdb",
+        "func": "function parseCSVLine(line){return line.split(',').map(s=>s.trim());}\nconst text=(msg.payload||'').toString();\nconst lines=text.split(/\\r?\\n/).filter(l=>l.trim().length>0);\nif(lines.length<2){node.warn('ap_db empty');return null;}\nconst header=parseCSVLine(lines[0]).map(h=>h.toLowerCase());\nconst idx={bssid:header.indexOf('bssid'),lat:header.indexOf('lat'),lon:header.indexOf('lon'),source:header.indexOf('source')};\nfor(const k of ['bssid','lat','lon']){ if(idx[k]<0){ node.error('Missing col: '+k); return null; } }\nconst apdb=[];\nfor(let i=1;i<lines.length;i++){\n  const c=parseCSVLine(lines[i]);\n  const bssid=(c[idx.bssid]||'').toLowerCase();\n  const lat=Number(c[idx.lat]);\n  const lon=Number(c[idx.lon]);\n  const source=(idx.source>=0?(c[idx.source]||''):'');\n  if(!bssid||!Number.isFinite(lat)||!Number.isFinite(lon)) continue;\n  apdb.push({bssid, lat, lon, source});\n}\nmsg.topic='apdb';\nmsg.payload=apdb;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 680,
+        "y": 80,
+        "wires": [
+            [
+                "ui_template_leaflet2",
+                "3c0c44789d731a1a"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_in_geo2",
+        "type": "mqtt in",
+        "z": "tab_geo2",
+        "name": "MQTT IN sim/geo_result",
+        "topic": "sim/geo_result",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "mqtt_broker_local2",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 170,
+        "y": 200,
+        "wires": [
+            [
+                "json_parse_geo2"
+            ]
+        ]
+    },
+    {
+        "id": "json_parse_geo2",
+        "type": "json",
+        "z": "tab_geo2",
+        "name": "JSON parse",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 360,
+        "y": 200,
+        "wires": [
+            [
+                "fn_split_for_ui2",
+                "e961e08e1c5a39df"
+            ]
+        ]
+    },
+    {
+        "id": "ui_text_latest2",
+        "type": "ui_text",
+        "z": "tab_geo2",
+        "group": "ui_group_status2",
+        "order": 1,
+        "width": "12",
+        "height": "1",
+        "name": "Latest",
+        "label": "Estimated location",
+        "format": "sid={{msg.payload.sid}} | ts={{msg.payload.ts}} | est=({{msg.payload.lat}}, {{msg.payload.lon}}) | used={{msg.payload.used}} | method={{msg.payload.method}}",
+        "layout": "col-center",
+        "className": "",
+        "style": false,
+        "font": "",
+        "fontSize": "",
+        "color": "#000000",
+        "x": 970,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "fn_split_for_ui2",
+        "type": "function",
+        "z": "tab_geo2",
+        "name": "To map layers: obs + node",
+        "func": "let p = msg.payload;\nif (Buffer.isBuffer(p)) p = p.toString(\"utf8\");\nif (typeof p === \"string\") p = JSON.parse(p);\nif (p && p.payload && typeof p.payload === \"object\" && !p.used_aps) p = p.payload;\np = p || {};\n\nconst used = Array.isArray(p.used_aps) ? p.used_aps : [];\n\n// use the result of python for location（ML）\nconst est = (p.est && typeof p.est === \"object\") ? p.est : {};\nconst estLat = (est.lat != null) ? Number(est.lat) : null;\nconst estLon = (est.lon != null) ? Number(est.lon) : null;\nconst estMethod = est.method || \"unknown\";\nconst estUsed = (est.used != null) ? Number(est.used) : used.length;\n\n// output two messages to map\nnode.send({\n  topic: \"obs_aps\",\n  payload: used,\n  meta: { sid: p.sid, ts: p.ts }\n});\n\nnode.send({\n  topic: \"node\",\n  payload: {\n    device_id: p.device_id,\n    sid: p.sid,\n    ts: p.ts,\n    lat: estLat,\n    lon: estLon,\n    method: estMethod,   // show multilateration or fallback\n    used: estUsed\n  }\n});\n\nreturn null;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 620,
+        "y": 200,
+        "wires": [
+            [
+                "ui_template_leaflet2",
+                "77a4a5801e4a2799",
+                "74e1a2c5267449bd"
+            ]
+        ]
+    },
+    {
+        "id": "ui_template_leaflet2",
+        "type": "ui_template",
+        "z": "tab_geo2",
+        "group": "ui_group_map2",
+        "name": "Leaflet Map (AP known + RX + Estimated)",
+        "order": 1,
+        "width": "12",
+        "height": "10",
+        "format": "<div id=\"map2\" style=\"width: 100%; height: 560px;\"></div>\n\n<script>\n(function(scope){\n  function loadCSS(href){\n    var l=document.createElement('link');\n    l.rel='stylesheet'; l.href=href;\n    document.head.appendChild(l);\n  }\n  function loadJS(src, cb){\n    var s=document.createElement('script');\n    s.src=src; s.onload=cb;\n    document.head.appendChild(s);\n  }\n\n  function init(){\n    if(!window.L) return;\n\n    // --- init map once\n    if(!scope._map){\n      scope._map = L.map('map2').setView([48.844953, 2.356994], 17);\n\n      setTimeout(function(){\n        try { scope._map.invalidateSize(true); } catch(e) {}\n      }, 300);\n\n      setTimeout(function(){\n        try { scope._map.invalidateSize(true); } catch(e) {}\n      }, 1200);\n\n      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {\n        maxZoom: 20,\n        attribution: '&copy; OpenStreetMap contributors'\n      }).addTo(scope._map);\n\n      scope._layerDb   = L.layerGroup().addTo(scope._map);\n      scope._layerObs  = L.layerGroup().addTo(scope._map);\n      scope._layerNode = L.layerGroup().addTo(scope._map);\n\n      scope._nodeMarker = null;\n    }\n\n    function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }\n\n    function radiusFromRssi(rssi){\n      // rssi [-100..-30] -> radius [4..10]\n      if(typeof rssi !== 'number') return 7;\n      var x = clamp(rssi, -100, -30);\n      return 4 + (x + 100) * (6/70);\n    }\n\n    function safe(v){ return (v===undefined || v===null) ? '' : String(v); }\n\n    try { scope._map.invalidateSize(false); } catch(e) {}\n    scope.$watch('msg', function(msg){\n      if(!msg) return;\n\n      // --------- topic = apdb (Known APs)\n      if(msg.topic === 'apdb' && Array.isArray(msg.payload)){\n        scope._layerDb.clearLayers();\n\n        msg.payload.forEach(function(ap){\n          if(!ap || ap.lat==null || ap.lon==null) return;\n\n          var m = L.circleMarker([ap.lat, ap.lon], {\n            radius: 4\n          });\n\n          m.bindPopup(\n            '<b>AP connu (DB)</b><br>' +\n            'bssid: ' + safe(ap.bssid) + '<br>' +\n            'source: ' + safe(ap.source) + '<br>' +\n            'lat: ' + safe(ap.lat) + '<br>' +\n            'lon: ' + safe(ap.lon)\n          );\n\n          m.addTo(scope._layerDb);\n        });\n      }\n\n      // --------- topic = obs_aps (Received data from node, matched to DB)\n      if(msg.topic === 'obs_aps' && Array.isArray(msg.payload)){\n        scope._layerObs.clearLayers();\n\n        var metaSid = msg.meta ? msg.meta.sid : '';\n        var metaTs  = msg.meta ? msg.meta.ts  : '';\n\n        msg.payload.forEach(function(ap){\n          if(!ap || ap.lat==null || ap.lon==null) return;\n\n          var r = radiusFromRssi(ap.rssi);\n\n          var m = L.circleMarker([ap.lat, ap.lon], {\n            radius: r\n          });\n\n          m.bindPopup(\n            '<b>Données reçues (AP match)</b><br>' +\n            'sid: ' + safe(metaSid) + '<br>' +\n            'ts: '  + safe(metaTs) + '<br>' +\n            'bssid: ' + safe(ap.bssid || ap.mac) + '<br>' +\n            'rssi: ' + safe(ap.rssi) + ' dBm<br>' +\n            'ch: ' + safe(ap.ch) + '<br>' +\n            'ssid: ' + safe(ap.ssid_obs) + '<br>' +\n            'source: ' + safe(ap.source) + '<br>' +\n            'lat: ' + safe(ap.lat) + '<br>' +\n            'lon: ' + safe(ap.lon)\n          );\n\n          m.addTo(scope._layerObs);\n        });\n      }\n\n      // --------- topic = node (Estimated position)\n      if(msg.topic === 'node' && msg.payload && msg.payload.lat!=null && msg.payload.lon!=null){\n        scope._layerNode.clearLayers();\n\n        var lat = msg.payload.lat;\n        var lon = msg.payload.lon;\n\n        // Red estimated position marker as circle marker\n        var m = L.circleMarker([lat, lon], {\n          radius: 10,\n          color: 'red',\n          weight: 2,\n          fillColor: 'red',\n          fillOpacity: 0.35\n        });\n\n        m.bindPopup(\n          '<b>Position estimée du nœud</b><br>' +\n          'device: ' + safe(msg.payload.device_id) + '<br>' +\n          'sid: ' + safe(msg.payload.sid) + '<br>' +\n          'ts: ' + safe(msg.payload.ts) + '<br>' +\n          'method: ' + safe(msg.payload.method) + '<br>' +\n          'used APs: ' + safe(msg.payload.used) + '<br>' +\n          'lat: ' + safe(lat) + '<br>' +\n          'lon: ' + safe(lon)\n        );\n\n        m.addTo(scope._layerNode);\n\n        // move map to estimated position\n        scope._map.panTo([lat, lon]);\n      }\n    });\n  }\n\n  if(!window.L){\n    loadCSS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');\n    loadJS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', init);\n  } else {\n    init();\n  }\n})(scope);\n</script>\n",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1020,
+        "y": 140,
+        "wires": [
+            [
+                "12da7db36e33b8f3"
+            ]
+        ]
+    },
+    {
+        "id": "e961e08e1c5a39df",
+        "type": "debug",
+        "z": "tab_geo2",
+        "name": "debug 1",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 540,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "77a4a5801e4a2799",
+        "type": "debug",
+        "z": "tab_geo2",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "12da7db36e33b8f3",
+        "type": "debug",
+        "z": "tab_geo2",
+        "name": "debug 3",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1240,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "3c0c44789d731a1a",
+        "type": "debug",
+        "z": "tab_geo2",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1120,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "74e1a2c5267449bd",
+        "type": "switch",
+        "z": "tab_geo2",
+        "name": "",
+        "property": "topic",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "node",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 810,
+        "y": 360,
+        "wires": [
+            [
+                "ui_text_latest2"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_broker_local2",
+        "type": "mqtt-broker",
+        "name": "Local MQTT",
+        "broker": "127.0.0.1",
+        "port": "1883",
+        "clientid": "node-red-geo-view",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "ui_group_status2",
+        "type": "ui_group",
+        "name": "Latest",
+        "tab": "ui_tab_geo2",
+        "order": 2,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "ui_group_map2",
+        "type": "ui_group",
+        "name": "Map",
+        "tab": "ui_tab_geo2",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "ui_tab_geo2",
+        "type": "ui_tab",
+        "name": "GEO",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "173a4d6fc2d15152",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-dashboard": "3.6.6"
+        }
+    }
+]
